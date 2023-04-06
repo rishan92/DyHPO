@@ -30,6 +30,8 @@ class LCBench(BaseBenchmark):
         self.benchmark = self._load_benchmark()
         self.dataset_name = dataset_name
         self.dataset_names = self.load_dataset_names()
+        self.min_value = None
+        self.max_value = None
 
     def get_worst_performance(self):
 
@@ -52,6 +54,7 @@ class LCBench(BaseBenchmark):
 
         bench = Benchmark(
             data_dir=self.path_to_json_file,
+            cache=True
         )
 
         return bench

@@ -20,6 +20,8 @@ class DyHPOAlgorithm:
         self,
         hp_candidates: np.ndarray,
         log_indicator: List,
+        min_value: float,
+        max_value: float,
         seed: int = 11,
         max_benchmark_epochs: int = 52,
         fantasize_step: int = 1,
@@ -81,6 +83,9 @@ class DyHPOAlgorithm:
 
         self.minimization = minimization
         self.seed = seed
+
+        self.min_value = min_value
+        self.max_value = max_value
 
         if verbose:
             logging_level = logging.DEBUG
@@ -325,12 +330,17 @@ class DyHPOAlgorithm:
             learning_curve: The learning curve of the hyperparameter configuration.
             alg_time: The time taken from the algorithm to evaluate the hp configuration.
         """
-        score = learning_curve[-1]
         # if y is an undefined value, append 0 as the overhead since we finish here.
         if np.isnan(learning_curve).any():
             self.update_info_dict(hp_index, b, np.nan, 0)
             self.diverged_configs.add(hp_index)
             return
+
+        if self.minimization:
+            learning_curve = np.subtract([self.max_value] * len(learning_curve), learning_curve) / (self.max_value - self.min_value)
+            learning_curve = learning_curve.tolist()
+
+        score = learning_curve[-1]
 
         observe_time_start = time.time()
 

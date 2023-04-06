@@ -44,7 +44,7 @@ parser.add_argument(
 parser.add_argument(
     '--project_dir',
     type=str,
-    default='C:\\Users\\arlin\\Desktop\\DyHPO', #'/home/arlind/Desktop/DyHPO',
+    default='.', #'/home/arlind/Desktop/DyHPO',
 )
 parser.add_argument(
     '--output_dir',
@@ -63,6 +63,12 @@ if benchmark_name == 'lcbench':
         'lc_bench',
         'results',
         'data_2k.json',
+    )
+elif benchmark_name == 'lcbench_mini':
+    benchmark_extension = os.path.join(
+        'lc_bench',
+        'results',
+        'lcbench_credit-g.json',
     )
 elif benchmark_name == 'taskset':
     benchmark_extension = os.path.join(
@@ -91,11 +97,13 @@ os.makedirs(output_dir, exist_ok=True)
 surrogate_types = {
     'lcbench': LCBench,
     'taskset': TaskSet,
+    'lcbench_mini': LCBench,
 }
 
 minimization_problem_type = {
     'lcbench': False,
     'taskset': True,
+    'lcbench_mini': False,
 }
 
 minimization = minimization_problem_type[benchmark_name]
@@ -112,6 +120,8 @@ if benchmark_name == 'taskset':
 dyhpo_surrogate = DyHPOAlgorithm(
     benchmark.get_hyperparameter_candidates(),
     benchmark.log_indicator,
+    min_value=benchmark.min_value,
+    max_value=benchmark.max_value,
     seed=seed,
     max_benchmark_epochs=benchmark.max_budget,
     fantasize_step=fantasize_step,

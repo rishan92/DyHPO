@@ -23,7 +23,7 @@ class TaskSet(BaseBenchmark):
         'exponential_decay',
     ]
 
-    log_indicator = [True, False, False, False, True, True, True, True]
+    log_indicator = [True, False, False, True, True, True, True, True]
 
     def __init__(self, path_to_json_files: str, dataset_name: str):
 
@@ -33,8 +33,6 @@ class TaskSet(BaseBenchmark):
         self.training_curves = []
         self.validation_curves = []
         self.test_curves = []
-        self.min_value = 0
-        self.max_value = 0
 
         self._load_benchmark()
         #self.validation_curves = self.log_transform_labels()
@@ -44,15 +42,17 @@ class TaskSet(BaseBenchmark):
         self.hp_candidates = np.array(self.hp_candidates)
         self.hp_candidates = self.hp_candidates[filtered_indices]
 
+        self.min_value = min(self.get_incumbent_curve())
+        self.max_value = self.get_worst_performance()
 
     def get_worst_performance(self):
 
         # for taskset we have loss, so the worst value is infinity
-        min_value = np.inf
+        min_value = np.NINF
         for hp_index in range(0, self.validation_curves.shape[0]):
             val_curve = self.validation_curves[hp_index]
             worst_performance_hp_curve = max(val_curve)
-            if worst_performance_hp_curve < min_value:
+            if worst_performance_hp_curve > min_value:
                 min_value = worst_performance_hp_curve
 
         return min_value
