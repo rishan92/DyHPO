@@ -1,3 +1,4 @@
+import random
 from copy import deepcopy
 import logging
 import os
@@ -86,7 +87,6 @@ class FeatureExtractor(nn.Module):
 
         return x
 
-
 class GPRegressionModel(gpytorch.models.ExactGP):
     """
     A simple GP model.
@@ -144,6 +144,12 @@ class DyHPO:
                 properly.
         """
         super(DyHPO, self).__init__()
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        check_seed_torch = torch.random.get_rng_state().sum()
+        check_seed_np = np.sum(np.random.get_state()[1])
+        check_seed_random = np.sum(random.getstate()[1])
         self.feature_extractor = FeatureExtractor(configuration)
         self.batch_size = configuration['batch_size']
         self.nr_epochs = configuration['nr_epochs']
@@ -195,6 +201,12 @@ class DyHPO:
         """
         Restart the surrogate model from scratch.
         """
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+        check_seed_torch = torch.random.get_rng_state().sum()
+        check_seed_np = np.sum(np.random.get_state()[1])
+        check_seed_random = np.sum(random.getstate()[1])
         self.feature_extractor = FeatureExtractor(self.configuration).to(self.dev)
         self.model, self.likelihood, self.mll = \
             self.get_model_likelihood_mll(
@@ -285,7 +297,12 @@ class DyHPO:
         mse = 0.0
 
         for epoch_nr in range(0, nr_epochs):
-
+            torch.manual_seed(self.seed)
+            np.random.seed(self.seed)
+            random.seed(self.seed)
+            check_seed_torch = torch.random.get_rng_state().sum()
+            check_seed_np = np.sum(np.random.get_state()[1])
+            check_seed_random = np.sum(random.getstate()[1])
             nr_examples_batch = X_train.size(dim=0)
             # if only one example in the batch, skip the batch.
             # Otherwise, the code will fail because of batchnorm
@@ -305,10 +322,10 @@ class DyHPO:
                 loss_value = loss.detach().to('cpu').item()
                 mse = gpytorch.metrics.mean_squared_error(output, self.model.train_targets)
                 self.logger.debug(
-                    f'Epoch {epoch_nr} - MSE {mse:.5f}, '
-                    f'Loss: {loss_value:.3f}, '
-                    f'lengthscale: {self.model.covar_module.base_kernel.lengthscale.item():.3f}, '
-                    f'noise: {self.model.likelihood.noise.item():.3f}, '
+                    f'Epoch {epoch_nr} - MSE {mse}, '
+                    f'Loss: {loss_value}, '
+                    f'lengthscale: {self.model.covar_module.base_kernel.lengthscale.item()}, '
+                    f'noise: {self.model.likelihood.noise.item()}, '
                 )
                 loss.backward()
                 self.optimizer.step()
@@ -319,7 +336,10 @@ class DyHPO:
                 self.restart = True
                 training_errored = True
                 break
-
+        check_seed_torch = torch.random.get_rng_state().sum()
+        check_seed_np = np.sum(np.random.get_state()[1])
+        check_seed_random = np.sum(random.getstate()[1])
+        self.logger.info(f"end rng_state {check_seed_torch}")
         """
         # metric too high, time to restart, or we risk divergence
         if mse > 0.15:
@@ -350,7 +370,9 @@ class DyHPO:
         self.model.eval()
         self.feature_extractor.eval()
         self.likelihood.eval()
-
+        check_seed_torch = torch.random.get_rng_state().sum()
+        check_seed_np = np.sum(np.random.get_state()[1])
+        check_seed_random = np.sum(random.getstate()[1])
         with torch.no_grad(): # gpytorch.settings.fast_pred_var():
             projected_train_x = self.feature_extractor(
                 train_data['X_train'],

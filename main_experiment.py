@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import torch
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -86,6 +87,11 @@ benchmark_data_path = os.path.join(
 seeds = np.arange(10)
 seed = seeds[args.index - 1]
 random.seed(seed)
+
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.use_deterministic_algorithms(True)
 
 output_dir = os.path.join(
     args.output_dir,

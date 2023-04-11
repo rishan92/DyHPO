@@ -10,6 +10,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import norm, t
 import torch
+import random
 
 from surrogate_models.dyhpo import DyHPO
 
@@ -68,6 +69,7 @@ class DyHPOAlgorithm:
         torch.backends.cudnn.benchmark = False
         torch.manual_seed(seed)
         np.random.seed(seed)
+        random.seed(seed)
 
         if device is None:
             self.dev = torch.device(
@@ -97,6 +99,7 @@ class DyHPOAlgorithm:
             format='%(levelname)s:%(asctime)s:%(message)s',
             filename=f'dyhpo_surrogate_{dataset_name}_{seed}.log',
             level=logging_level,
+            filemode='w',
         )
 
         # the keys will be hyperparameter indices while the value
@@ -109,6 +112,7 @@ class DyHPOAlgorithm:
         # generating the seeds of the ensemble
         torch.manual_seed(seed)
         np.random.seed(seed)
+        random.seed(seed)
 
         self.max_benchmark_epochs = max_benchmark_epochs
         self.total_budget = total_budget
@@ -162,7 +166,6 @@ class DyHPOAlgorithm:
 
         self.no_improvement_threshold = int(self.max_benchmark_epochs + 0.2 * self.max_benchmark_epochs)
         self.no_improvement_patience = 0
-
 
     def _prepare_dataset_and_budgets(self) -> Dict[str, torch.Tensor]:
         """
@@ -344,7 +347,7 @@ class DyHPOAlgorithm:
 
         observe_time_start = time.time()
 
-        self.examples[hp_index] = np.arange(b + 1).tolist()
+        self.examples[hp_index] = np.arange(1, b + 1).tolist()
         self.performances[hp_index] = learning_curve
 
         if self.best_value_observed < score:
