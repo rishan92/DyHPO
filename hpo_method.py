@@ -355,7 +355,7 @@ class DyHPOAlgorithm:
             self.no_improvement_patience = 0
         else:
             self.no_improvement_patience += 1
-
+        self.logger.debug(f"no_improvement_patience {self.no_improvement_patience}")
         observe_time_end = time.time()
         train_time_duration = 0
 
@@ -373,8 +373,13 @@ class DyHPOAlgorithm:
                     self.seed,
                 )
 
-            if self.no_improvement_patience == self.no_improvement_threshold:
+            if self.no_improvement_patience >= self.no_improvement_threshold:
                 self.model.restart = True
+                self.no_improvement_patience = 0
+                self.logger.info(
+                    'No improvement in the incumbent value threshold reached, '
+                    'restarting training from scratch'
+                )
 
             self._train_surrogate()
 
