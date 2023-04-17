@@ -22,7 +22,7 @@ class FeatureExtractorPowerLaw(nn.Module):
 
         self.nr_layers = configuration['nr_layers']
         self.act_func = nn.LeakyReLU()
-        self.last_act_func = nn.GLU()
+        self.last_act_func = nn.GELU()
         # adding one to the dimensionality of the initial input features
         # for the concatenation with the budget.
         initial_features = configuration['nr_initial_features']  # + 1
@@ -45,8 +45,8 @@ class FeatureExtractorPowerLaw(nn.Module):
             self,
             f'fc{self.nr_layers}',
             nn.Linear(
-                configuration[f'layer{self.nr_layers - 1}_units'] +
-                configuration['cnn_nr_channels'],  # accounting for the learning curve features
+                configuration[f'layer{self.nr_layers - 1}_units'],
+                # configuration['cnn_nr_channels'],  # accounting for the learning curve features
                 configuration[f'layer{self.nr_layers}_units']
             ),
         )
@@ -64,7 +64,7 @@ class FeatureExtractorPowerLaw(nn.Module):
 
         # add an extra dimensionality for the budget
         # making it nr_rows x 1.
-        budgets = torch.unsqueeze(budgets, dim=1)
+
         # concatenate budgets with examples
         # x = cat((x, budgets), dim=1)
         x = self.fc1(x)
@@ -81,27 +81,41 @@ class FeatureExtractorPowerLaw(nn.Module):
 
         # add an extra dimensionality for the learning curve
         # making it nr_rows x 1 x lc_values.
-        learning_curves = torch.unsqueeze(learning_curves, 1)
-        lc_features = self.cnn(learning_curves)
-        # revert the output from the cnn into nr_rows x nr_kernels.
-        lc_features = torch.squeeze(lc_features, 2)
+        # learning_curves = torch.unsqueeze(learning_curves, 1)
+        # lc_features = self.cnn(learning_curves)
+        # # revert the output from the cnn into nr_rows x nr_kernels.
+        # lc_features = torch.squeeze(lc_features, 2)
 
         # put learning curve features into the last layer along with the higher level features.
-        x = cat((x, lc_features), dim=1)
+        # x = cat((x, lc_features), dim=1)
         x = self.act_func(getattr(self, f'fc{self.nr_layers}')(x))
 
-        x = self.act_func(getattr(self, f'fc{self.nr_layers+1}')(x))
-        x = cat((x, budgets), dim=1)
+        x = getattr(self, f'fc{self.nr_layers+1}')(x)
+        # x = cat((x, budgets), dim=1)
 
-        # alphas = x[:, 0]
-        # betas = x[:, 1]
-        # gammas = x[:, 2]
-        # betas = -1 * self.last_act_func(torch.cat((betas, betas)))
-        # gammas = -1 * self.last_act_func(torch.cat((gammas, gammas)))
-        # alphas = torch.unsqueeze(alphas, dim=1)
-        # betas = torch.unsqueeze(betas, dim=1)
-        # gammas = torch.unsqueeze(gammas, dim=1)
-        # x = cat((alphas, betas, gammas, budgets), dim=1)
+        alphas = x[:, 0]
+        betas = x[:, 1]
+        gammas = x[:, 2]
+        betas = self.last_act_func(betas)
+        gammas = self.last_act_func(gammas)
+
+        output = torch.add(
+            alphas,
+            torch.mul(
+                betas,
+                torch.pow(
+                    budgets,
+                    torch.mul(gammas, -1)
+                )
+            ),
+        )
+        budgets = torch.unsqueeze(budgets, dim=1)
+        alphas = torch.unsqueeze(alphas, dim=1)
+        betas = torch.unsqueeze(betas, dim=1)
+        gammas = torch.unsqueeze(gammas, dim=1)
+        output = torch.unsqueeze(output, dim=1)
+
+        x = cat((alphas, betas, gammas, budgets, output), dim=1)
 
         return x
 
@@ -250,7 +264,7 @@ class DyHPO:
         self.seed = seed
         self.model, self.likelihood, self.mll = \
             self.get_model_likelihood_mll(
-                4
+                5
             )
 
         self.model.to(self.dev)
@@ -295,7 +309,7 @@ class DyHPO:
         self.feature_extractor = self.feature_net_class(self.configuration).to(self.dev)
         self.model, self.likelihood, self.mll = \
             self.get_model_likelihood_mll(
-                4,
+                5,
             )
 
         self.optimizer = torch.optim.Adam([

@@ -337,14 +337,14 @@ class DyHPOAlgorithm:
             return
 
         if self.minimization:
-            learning_curve = np.subtract([self.max_value] * len(learning_curve), learning_curve) / (self.max_value - self.min_value)
+            learning_curve = np.subtract([self.max_value] * len(learning_curve), learning_curve)
             learning_curve = learning_curve.tolist()
 
         score = learning_curve[-1]
 
         observe_time_start = time.time()
 
-        self.examples[hp_index] = np.arange(b + 1).tolist()
+        self.examples[hp_index] = np.arange(1, b + 1).tolist()
         self.performances[hp_index] = learning_curve
 
         if self.best_value_observed < score:
