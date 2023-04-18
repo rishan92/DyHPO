@@ -137,10 +137,18 @@ incumbent = 0
 method_trajectory = []
 dyhpo_budgets = []
 
+incumbent_hp_index = benchmark.get_incumbent_config_id()
+pred_curves_path = os.path.join(output_dir, "pred_curves")
+os.makedirs(pred_curves_path, exist_ok=True)
+
 while method_budget < budget_limit:
 
     hp_index, budget = dyhpo_surrogate.suggest()
     performance_curve = benchmark.get_curve(hp_index, budget)
+    if budget == 10 or budget == 20 or budget == 40:
+        dyhpo_surrogate.plot_pred_curve(hp_index, benchmark, method_budget, pred_curves_path)
+        dyhpo_surrogate.plot_pred_curve(incumbent_hp_index, benchmark, method_budget, pred_curves_path, prefix="incumbent_")
+
     score = performance_curve[-1]
     dyhpo_surrogate.observe(hp_index, budget, performance_curve)
     budget_cost = 0

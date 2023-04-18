@@ -255,6 +255,7 @@ class DyHPO:
         super(DyHPO, self).__init__()
         # self.feature_net_class = FeatureExtractor
         self.feature_net_class = FeatureExtractorPowerLaw
+        self.feature_net_output_size = 5
         self.feature_extractor = self.feature_net_class(configuration)
         self.batch_size = configuration['batch_size']
         self.nr_epochs = configuration['nr_epochs']
@@ -264,7 +265,7 @@ class DyHPO:
         self.seed = seed
         self.model, self.likelihood, self.mll = \
             self.get_model_likelihood_mll(
-                5
+                self.feature_net_output_size
             )
 
         self.model.to(self.dev)
@@ -309,7 +310,7 @@ class DyHPO:
         self.feature_extractor = self.feature_net_class(self.configuration).to(self.dev)
         self.model, self.likelihood, self.mll = \
             self.get_model_likelihood_mll(
-                5,
+                self.feature_net_output_size,
             )
 
         self.optimizer = torch.optim.Adam([

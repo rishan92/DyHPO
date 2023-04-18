@@ -7,11 +7,15 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import norm, t
 import torch
 
 from surrogate_models.dyhpo import DyHPO
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 class DyHPOAlgorithm:
@@ -256,6 +260,60 @@ class DyHPOAlgorithm:
 
         return mean_predictions, std_predictions, hp_indices, non_scaled_budgets
 
+    def plot_pred_curve(self, hp_index, benchmark, method_budget, output_dir, prefix=""):
+        if self.model is None:
+            return
+
+        train_data = self._prepare_dataset_and_budgets()
+        real_curve = benchmark.get_curve(hp_index, self.max_benchmark_epochs)
+        curves = []
+        if hp_index in self.examples:
+            budgets = self.examples[hp_index]
+            max_budget = max(budgets)
+            performances = self.performances[hp_index]
+            for budget, performance in zip(budgets, performances):
+                train_curve = performances[:budget - 1] if budget > 1 else [0.0]
+                difference_curve_length = self.surrogate_config['cnn_kernel_size'] - len(train_curve)
+                if difference_curve_length > 0:
+                    train_curve.extend([0.0] * difference_curve_length)
+
+                curves.append(train_curve)
+            curves = self.patch_curves_to_same_length(curves)
+        else:
+            max_budget = 0
+            curves.append([0] * self.surrogate_config['cnn_kernel_size'])
+
+        p_config = self.prepare_examples([hp_index])[0]
+        p_config = torch.Tensor(p_config)
+        p_config = p_config.expand(self.max_benchmark_epochs, -1)
+
+        x_data = np.arange(1, self.max_benchmark_epochs + 1)
+        p_budgets = torch.Tensor(x_data / self.max_benchmark_epochs)
+
+        p_curve = torch.Tensor(curves)
+        p_curve_last_row = p_curve[-1].unsqueeze(0)
+        p_curve_num_repeats = self.max_benchmark_epochs - p_curve.size(0)
+        repeated_last_row = p_curve_last_row.repeat_interleave(p_curve_num_repeats, dim=0)
+        p_curve = torch.cat((p_curve, repeated_last_row), dim=0)
+
+        plot_test_data = {
+            'X_test': p_config,
+            'test_budgets': p_budgets,
+            'test_curves': p_curve,
+        }
+        mean_data, std_data = self.model.predict_pipeline(train_data, plot_test_data)
+
+        plt.clf()
+        p = sns.lineplot(x=x_data, y=mean_data)
+
+        p.axes.fill_between(x_data, mean_data + std_data, mean_data - std_data, alpha=0.3)
+
+        p.plot(x_data[:max_budget], real_curve[:max_budget], 'k-')
+        p.plot(x_data[max_budget:], real_curve[max_budget:], 'k--')
+
+        file_path = os.path.join(output_dir, f"{prefix}surrogatebudget_{method_budget}_budget_{max_budget}_hpindex_{hp_index}")
+        plt.savefig(file_path, dpi=100)
+
     def suggest(self) -> Tuple[int, int]:
         """
         Suggest a hyperparameter configuration to be evaluated next.
@@ -441,6 +499,7 @@ class DyHPOAlgorithm:
             if next_budget <= self.max_benchmark_epochs:
                 hp_indices.append(hp_index)
                 hp_budgets.append(next_budget)
+                # hp_budgets.append(self.max_benchmark_epochs)
                 learning_curves.append(curve)
 
         configurations = self.prepare_examples(hp_indices)
