@@ -2,10 +2,14 @@ import argparse
 import os
 import random
 
+import matplotlib
+matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 sns.set_style('white')
+
 
 from benchmarks.lcbench import LCBench
 from benchmarks.taskset import TaskSet

@@ -14,10 +14,8 @@ import torch
 
 from surrogate_models.dyhpo import DyHPO
 
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
-matplotlib.use('Agg')
 
 
 class DyHPOAlgorithm:
