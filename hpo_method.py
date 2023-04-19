@@ -14,8 +14,10 @@ import torch
 
 from surrogate_models.dyhpo import DyHPO
 
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
+matplotlib.use('Agg')
 
 
 class DyHPOAlgorithm:
@@ -166,7 +168,6 @@ class DyHPOAlgorithm:
 
         self.no_improvement_threshold = int(self.max_benchmark_epochs + 0.2 * self.max_benchmark_epochs)
         self.no_improvement_patience = 0
-
 
     def _prepare_dataset_and_budgets(self) -> Dict[str, torch.Tensor]:
         """
@@ -498,8 +499,8 @@ class DyHPOAlgorithm:
             # this hyperparameter configuration is not evaluated fully
             if next_budget <= self.max_benchmark_epochs:
                 hp_indices.append(hp_index)
-                hp_budgets.append(next_budget)
-                # hp_budgets.append(self.max_benchmark_epochs)
+                # hp_budgets.append(next_budget)
+                hp_budgets.append(self.max_benchmark_epochs)
                 learning_curves.append(curve)
 
         configurations = self.prepare_examples(hp_indices)

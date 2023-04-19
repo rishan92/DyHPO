@@ -102,7 +102,7 @@ class FeatureExtractorPowerLaw(nn.Module):
         output = torch.add(
             alphas,
             torch.mul(
-                betas,
+                torch.mul(betas, -1), #betas,
                 torch.pow(
                     budgets,
                     torch.mul(gammas, -1)
@@ -196,6 +196,15 @@ class FeatureExtractor(nn.Module):
         return x
 
 
+class PowerLawMean(gpytorch.means.Mean):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        last_column = x[:, -1]
+        return last_column
+
+
 class GPRegressionModel(gpytorch.models.ExactGP):
     """
     A simple GP model.
@@ -216,7 +225,8 @@ class GPRegressionModel(gpytorch.models.ExactGP):
         """
         super(GPRegressionModel, self).__init__(train_x, train_y, likelihood)
 
-        self.mean_module = gpytorch.means.ConstantMean()
+        # self.mean_module = gpytorch.means.ConstantMean()
+        self.mean_module = PowerLawMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
 
     def forward(self, x):
