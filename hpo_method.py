@@ -497,8 +497,8 @@ class DyHPOAlgorithm:
             # this hyperparameter configuration is not evaluated fully
             if next_budget <= self.max_benchmark_epochs:
                 hp_indices.append(hp_index)
-                # hp_budgets.append(next_budget)
-                hp_budgets.append(self.max_benchmark_epochs)
+                hp_budgets.append(next_budget)
+                # hp_budgets.append(self.max_benchmark_epochs)
                 learning_curves.append(curve)
 
         configurations = self.prepare_examples(hp_indices)

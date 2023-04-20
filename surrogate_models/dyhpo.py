@@ -102,7 +102,7 @@ class FeatureExtractorPowerLaw(nn.Module):
         output = torch.add(
             alphas,
             torch.mul(
-                torch.mul(betas, -1), #betas,
+                betas,  # torch.mul(betas, -1),
                 torch.pow(
                     budgets,
                     torch.mul(gammas, -1)
@@ -115,7 +115,7 @@ class FeatureExtractorPowerLaw(nn.Module):
         gammas = torch.unsqueeze(gammas, dim=1)
         output = torch.unsqueeze(output, dim=1)
 
-        x = cat((alphas, betas, gammas, budgets, output), dim=1)
+        x = cat((alphas, betas, gammas, output), dim=1)
 
         return x
 
@@ -225,8 +225,8 @@ class GPRegressionModel(gpytorch.models.ExactGP):
         """
         super(GPRegressionModel, self).__init__(train_x, train_y, likelihood)
 
-        # self.mean_module = gpytorch.means.ConstantMean()
-        self.mean_module = PowerLawMean()
+        self.mean_module = gpytorch.means.ConstantMean()
+        # self.mean_module = PowerLawMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
 
     def forward(self, x):
@@ -265,7 +265,7 @@ class DyHPO:
         super(DyHPO, self).__init__()
         # self.feature_net_class = FeatureExtractor
         self.feature_net_class = FeatureExtractorPowerLaw
-        self.feature_net_output_size = 5
+        self.feature_net_output_size = 4
         self.feature_extractor = self.feature_net_class(configuration)
         self.batch_size = configuration['batch_size']
         self.nr_epochs = configuration['nr_epochs']

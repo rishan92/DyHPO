@@ -72,7 +72,7 @@ elif benchmark_name == 'lcbench_mini':
     benchmark_extension = os.path.join(
         'lc_bench',
         'results',
-        'lcbench_credit-g.json',
+        'lcbench_airlines.json',
     )
 elif benchmark_name == 'taskset':
     benchmark_extension = os.path.join(
@@ -142,7 +142,7 @@ method_trajectory = []
 dyhpo_budgets = []
 
 incumbent_hp_index = benchmark.get_incumbent_config_id()
-pred_curves_path = os.path.join(output_dir, "pred_curves")
+pred_curves_path = os.path.join(output_dir, "pred_curves", args.dataset_name, str(args.index))
 os.makedirs(pred_curves_path, exist_ok=True)
 
 while method_budget < budget_limit:
