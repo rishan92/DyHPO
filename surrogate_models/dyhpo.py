@@ -292,6 +292,10 @@ class DyHPO:
         else:
             nr_epochs = self.refine_epochs
 
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
+
         # where the mean squared error will be stored
         # when predicting on the train set
         mse = 0.0
