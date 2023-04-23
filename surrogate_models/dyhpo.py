@@ -287,7 +287,7 @@ class DyHPO:
             # 2 cases where the statement below is hit.
             # - We are switching from the full training phase in the beginning to refining.
             # - We are restarting because our refining diverged
-            if self.initial_nr_points <= self.iterations:
+            if self.initial_nr_points < self.iterations:
                 self.restart = False
         else:
             nr_epochs = self.refine_epochs
