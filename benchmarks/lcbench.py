@@ -30,8 +30,8 @@ class LCBench(BaseBenchmark):
         self.benchmark = self._load_benchmark()
         self.dataset_name = dataset_name
         self.dataset_names = self.load_dataset_names()
-        self.min_value = None
-        self.max_value = None
+        self.min_value = 0.0
+        self.max_value = 1.0
 
     def get_worst_performance(self):
 

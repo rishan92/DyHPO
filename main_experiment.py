@@ -69,7 +69,7 @@ elif benchmark_name == 'lcbench_mini':
     benchmark_extension = os.path.join(
         'lc_bench',
         'results',
-        'lcbench_credit-g.json',
+        'lcbench_airlines.json',
     )
 elif benchmark_name == 'taskset':
     benchmark_extension = os.path.join(

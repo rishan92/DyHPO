@@ -148,7 +148,7 @@ class DyHPOAlgorithm:
             self.surrogate_config = surrogate_config
 
         # the incumbent value observed during the hpo process.
-        self.best_value_observed = np.NINF
+        self.best_value_observed = np.PINF
         # a set which will keep track of the hyperparameter configurations that diverge.
         self.diverged_configs = set()
 
@@ -339,7 +339,7 @@ class DyHPOAlgorithm:
             self.diverged_configs.add(hp_index)
             return
 
-        if self.minimization:
+        if not self.minimization:
             learning_curve = np.subtract([self.max_value] * len(learning_curve), learning_curve)
             learning_curve = learning_curve.tolist()
 
@@ -350,7 +350,7 @@ class DyHPOAlgorithm:
         self.examples[hp_index] = np.arange(1, b + 1).tolist()
         self.performances[hp_index] = learning_curve
 
-        if self.best_value_observed < score:
+        if self.best_value_observed > score:
             self.best_value_observed = score
             self.no_improvement_patience = 0
         else:
@@ -526,10 +526,10 @@ class DyHPOAlgorithm:
         if acq_fc == 'ei':
             if std == 0:
                 return 0
-            z = (mean - best_value) / std
-            acq_value = (mean - best_value) * norm.cdf(z) + std * norm.pdf(z)
+            z = (best_value - mean) / std
+            acq_value = (best_value - mean) * norm.cdf(z) + std * norm.pdf(z)
         elif acq_fc == 'ucb':
-            acq_value = mean + explore_factor * std
+            acq_value = -1 * mean + explore_factor * std
         elif acq_fc == 'thompson':
             acq_value = np.random.normal(mean, std)
         elif acq_fc == 'exploit':
@@ -569,6 +569,7 @@ class DyHPOAlgorithm:
         for mean_value, std in zip(mean_predictions, mean_stds):
             budget = int(budgets[index])
             best_value = self.calculate_fidelity_ymax(budget)
+            best_value = np.float32(best_value)
             acq_value = self.acq(best_value, mean_value, std, acq_fc='ei')
             if acq_value > highest_acq_value:
                 highest_acq_value = acq_value
@@ -606,13 +607,13 @@ class DyHPOAlgorithm:
                 learning_curve = self.performances[example_index]
                 # The hyperparameter was not evaluated until fidelity, or more.
                 # Take the maximum value from the curve.
-                lower_fidelity_config_values.append(max(learning_curve))
+                lower_fidelity_config_values.append(min(learning_curve))
 
         if len(exact_fidelity_config_values) > 0:
             # lowest error corresponds to best value
-            best_value = max(exact_fidelity_config_values)
+            best_value = min(exact_fidelity_config_values)
         else:
-            best_value = max(lower_fidelity_config_values)
+            best_value = min(lower_fidelity_config_values)
 
         return best_value
 
