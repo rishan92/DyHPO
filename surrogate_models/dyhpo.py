@@ -9,6 +9,105 @@ import torch.nn as nn
 from torch import cat
 
 import gpytorch
+from gpytorch.constraints import Interval
+
+
+class FeatureExtractorDPL(nn.Module):
+    """
+    The feature extractor that is part of the deep kernel.
+    """
+
+    def __init__(self, configuration):
+        super().__init__()
+
+        self.meta = configuration
+
+        self.nr_layers = self.meta['nr_layers']
+        self.act_func = nn.LeakyReLU()
+        self.last_act_func = nn.GLU()
+        # adding one to the dimensionality of the initial input features
+        # for the concatenation with the budget.
+        self.nr_features = self.meta['nr_initial_features']
+
+        self.layers = self.get_linear_net()
+
+    def get_linear_net(self):
+        layers = []
+        # adding one since we concatenate the features with the budget
+        nr_initial_features = self.nr_features
+
+        layers.append(nn.Linear(nr_initial_features, self.meta['nr_units']))
+        layers.append(self.act_func)
+
+        for i in range(2, self.meta['nr_layers'] + 1):
+            layers.append(nn.Linear(self.meta['nr_units'], self.meta['nr_units']))
+            layers.append(self.act_func)
+
+        last_layer = nn.Linear(self.meta['nr_units'], 3)
+        layers.append(last_layer)
+
+        net = torch.nn.Sequential(*layers)
+        return net
+
+    def forward(self, x, budgets, learning_curves):
+        x = self.layers(x)
+
+        alphas = x[:, 0]
+        betas = x[:, 1]
+        gammas = x[:, 2]
+        betas = self.last_act_func(torch.cat((betas, betas)))
+        gammas = self.last_act_func(torch.cat((gammas, gammas)))
+
+        output = torch.add(
+            alphas,
+            torch.mul(
+                betas,  # torch.mul(betas, -1),
+                torch.pow(
+                    budgets,
+                    torch.mul(gammas, -1)
+                )
+            ),
+        )
+        budgets = torch.unsqueeze(budgets, dim=1)
+        alphas = torch.unsqueeze(alphas, dim=1)
+        betas = torch.unsqueeze(betas, dim=1)
+        gammas = torch.unsqueeze(gammas, dim=1)
+        output = torch.unsqueeze(output, dim=1)
+
+        x = cat((alphas, betas, gammas, output), dim=1)
+        # x = cat((budgets, output), dim=1)
+        # x = output
+
+        # budget_lower_limit = torch.tensor(1 / 51)
+        # budget_upper_limit = torch.tensor(1)
+
+        # constrained_alpha = alphas
+        # constrained_beta = betas
+        # constrained_gamma = gammas
+        # start_output = torch.add(
+        #     constrained_alpha,
+        #     torch.mul(
+        #         constrained_beta,
+        #         torch.pow(
+        #             budget_lower_limit,
+        #             torch.mul(constrained_gamma, -1)
+        #         )
+        #     ),
+        # )
+        # end_output = torch.add(
+        #     constrained_alpha,
+        #     torch.mul(
+        #         constrained_beta,
+        #         torch.pow(
+        #             budget_upper_limit,
+        #             torch.mul(constrained_gamma, -1)
+        #         )
+        #     ),
+        # )
+        # print(f"start {start_output}")
+        # print(f"end {end_output}")
+
+        return x
 
 
 class FeatureExtractorPowerLaw(nn.Module):
@@ -115,7 +214,7 @@ class FeatureExtractorPowerLaw(nn.Module):
         gammas = torch.unsqueeze(gammas, dim=1)
         output = torch.unsqueeze(output, dim=1)
 
-        x = cat((alphas, betas, gammas, output), dim=1)
+        x = cat((alphas, betas, gammas, budgets, output), dim=1)
 
         return x
 
@@ -264,8 +363,8 @@ class DyHPO:
         """
         super(DyHPO, self).__init__()
         # self.feature_net_class = FeatureExtractor
-        self.feature_net_class = FeatureExtractorPowerLaw
-        self.feature_net_output_size = 4
+        self.feature_net_class = FeatureExtractorPowerLaw  # FeatureExtractorDPL #
+        self.feature_net_output_size = 5
         self.feature_extractor = self.feature_net_class(configuration)
         self.batch_size = configuration['batch_size']
         self.nr_epochs = configuration['nr_epochs']
@@ -345,7 +444,9 @@ class DyHPO:
         train_x = torch.ones(train_size, train_size).to(self.dev)
         train_y = torch.ones(train_size).to(self.dev)
 
-        likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.dev)
+        noise_constraint = Interval(lower_bound=1e-4, upper_bound=1e-3)
+
+        likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=noise_constraint).to(self.dev)
         model = GPRegressionModel(train_x=train_x, train_y=train_y, likelihood=likelihood).to(self.dev)
         mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model).to(self.dev)
 

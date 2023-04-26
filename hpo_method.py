@@ -134,6 +134,7 @@ class DyHPOAlgorithm:
         if surrogate_config is None:
             self.surrogate_config = {
                 'nr_layers': 2,
+                'nr_units': 128,
                 'nr_initial_features': self.nr_features,
                 'layer1_units': 64,
                 'layer2_units': 128,

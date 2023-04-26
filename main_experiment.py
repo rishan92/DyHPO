@@ -149,7 +149,7 @@ while method_budget < budget_limit:
 
     hp_index, budget = dyhpo_surrogate.suggest()
     performance_curve = benchmark.get_curve(hp_index, budget)
-    if budget == 10 or budget == 20 or budget == 40:
+    if budget == 10 or budget == 10 or budget == 20 or budget == 40:
         dyhpo_surrogate.plot_pred_curve(hp_index, benchmark, method_budget, pred_curves_path)
         dyhpo_surrogate.plot_pred_curve(incumbent_hp_index, benchmark, method_budget, pred_curves_path, prefix="incumbent_")
 
