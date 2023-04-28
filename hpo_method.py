@@ -168,6 +168,8 @@ class DyHPOAlgorithm:
         self.no_improvement_threshold = int(self.max_benchmark_epochs + 0.2 * self.max_benchmark_epochs)
         self.no_improvement_patience = 0
 
+        self.prediction_params_pd = None
+
     def _prepare_dataset_and_budgets(self) -> Dict[str, torch.Tensor]:
         """
         Prepare the data that will be the input to the surrogate.
@@ -219,7 +221,7 @@ class DyHPOAlgorithm:
             load_checkpoint=False,
         )
 
-    def _predict(self) -> Tuple[np.ndarray, np.ndarray, List, List]:
+    def _predict(self) -> Tuple[np.ndarray, np.ndarray, List, List, Dict]:
         """
         Predict the performances of the hyperparameter configurations
         as well as the standard deviations based on the surrogate model.
@@ -256,11 +258,11 @@ class DyHPOAlgorithm:
             'test_curves': learning_curves,
         }
 
-        mean_predictions, std_predictions = self.model.predict_pipeline(train_data, test_data)
+        mean_predictions, std_predictions, predict_infos = self.model.predict_pipeline(train_data, test_data)
 
-        return mean_predictions, std_predictions, hp_indices, non_scaled_budgets
+        return mean_predictions, std_predictions, hp_indices, non_scaled_budgets, predict_infos
 
-    def plot_pred_curve(self, hp_index, benchmark, method_budget, output_dir, prefix=""):
+    def plot_pred_curve(self, hp_index, benchmark, surrogate_budget, output_dir, prefix=""):
         if self.model is None:
             return
 
@@ -269,7 +271,7 @@ class DyHPOAlgorithm:
         curves = []
         if hp_index in self.examples:
             budgets = self.examples[hp_index]
-            max_budget = max(budgets)
+            max_train_budget = max(budgets)
             performances = self.performances[hp_index]
             for budget, performance in zip(budgets, performances):
                 train_curve = performances[:budget - 1] if budget > 1 else [0.0]
@@ -280,15 +282,15 @@ class DyHPOAlgorithm:
                 curves.append(train_curve)
             curves = self.patch_curves_to_same_length(curves)
         else:
-            max_budget = 0
+            max_train_budget = 0
             curves.append([0] * self.surrogate_config['cnn_kernel_size'])
 
         p_config = self.prepare_examples([hp_index])[0]
         p_config = torch.Tensor(p_config)
         p_config = p_config.expand(self.max_benchmark_epochs, -1)
 
-        x_data = np.arange(1, self.max_benchmark_epochs + 1)
-        p_budgets = torch.Tensor(x_data / self.max_benchmark_epochs)
+        real_budgets = np.arange(1, self.max_benchmark_epochs + 1)
+        p_budgets = torch.Tensor(real_budgets / self.max_benchmark_epochs)
 
         p_curve = torch.Tensor(curves)
         p_curve_last_row = p_curve[-1].unsqueeze(0)
@@ -301,20 +303,40 @@ class DyHPOAlgorithm:
             'test_budgets': p_budgets,
             'test_curves': p_curve,
         }
-        mean_data, std_data = self.model.predict_pipeline(train_data, plot_test_data)
+        mean_data, std_data, predict_infos = self.model.predict_pipeline(train_data, plot_test_data)
 
         plt.clf()
-        p = sns.lineplot(x=x_data, y=mean_data)
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 6))
+        fig.suptitle(
+            f'hp index {hp_index} at surrogate budget {surrogate_budget} and budget {max_train_budget}'
+        )
 
-        p.axes.fill_between(x_data, mean_data + std_data, mean_data - std_data, alpha=0.3)
+        predict_curve_axes = axes[0]
+        param_axes = axes[1]
+        sns.lineplot(x=real_budgets, y=mean_data, ax=predict_curve_axes, color='blue', label='mean prediction')
+        sns.lineplot(x=real_budgets, y=predict_infos['pl_output'], ax=predict_curve_axes, color='red',
+                     label='power law output')
+        predict_curve_axes.set_xlabel('Budget')
 
-        p.plot(x_data[:max_budget], real_curve[:max_budget], 'k-')
-        p.plot(x_data[max_budget:], real_curve[max_budget:], 'k--')
+        predict_curve_axes.fill_between(real_budgets, mean_data + std_data, mean_data - std_data, alpha=0.3)
 
-        file_path = os.path.join(output_dir, f"{prefix}surrogatebudget_{method_budget}_budget_{max_budget}_hpindex_{hp_index}")
-        plt.savefig(file_path, dpi=100)
+        predict_curve_axes.plot(real_budgets[:max_train_budget], real_curve[:max_train_budget], 'k-')
+        predict_curve_axes.plot(real_budgets[max_train_budget:], real_curve[max_train_budget:], 'k--')
 
-    def suggest(self) -> Tuple[int, int]:
+        data = self.prediction_params_pd.loc[:, hp_index]
+        sns.lineplot(data=data, ax=param_axes)
+        param_axes.set_xlabel('Surrogate Budget')
+
+        plt.tight_layout()
+        file_path = os.path.join(
+            output_dir,
+            f"{prefix}surrogateBudget_{surrogate_budget}_trainBudget_{max_train_budget}_hpIndex_{hp_index}"
+        )
+        plt.savefig(file_path, dpi=200)
+
+        plt.close()
+
+    def suggest(self, surrogate_budget) -> Tuple[int, int]:
         """
         Suggest a hyperparameter configuration to be evaluated next.
 
@@ -337,7 +359,7 @@ class DyHPOAlgorithm:
 
             return random_indice, budget
         else:
-            mean_predictions, std_predictions, hp_indices, non_scaled_budgets = self._predict()
+            mean_predictions, std_predictions, hp_indices, non_scaled_budgets, predict_infos = self._predict()
             best_prediction_index = self.find_suggested_config(
                 mean_predictions,
                 std_predictions,
@@ -362,6 +384,22 @@ class DyHPOAlgorithm:
                     budget = self.max_benchmark_epochs
             else:
                 budget = self.fantasize_step
+
+            if self.prediction_params_pd is None:
+                column_indexes = pd.MultiIndex.from_product([
+                    hp_indices,
+                    ['alpha', 'beta', 'gamma', 'pl_output']
+                ], names=['hp_index', 'parameter_type'])
+                self.prediction_params_pd = pd.DataFrame(
+                    index=np.arange(1, self.total_budget),
+                    columns=column_indexes
+                )
+
+            self.prediction_params_pd.loc[surrogate_budget, (hp_indices, 'alpha')] = predict_infos['alpha']
+            self.prediction_params_pd.loc[surrogate_budget, (hp_indices, 'beta')] = predict_infos['beta']
+            self.prediction_params_pd.loc[surrogate_budget, (hp_indices, 'gamma')] = predict_infos['gamma']
+            self.prediction_params_pd.loc[surrogate_budget, (hp_indices, 'pl_output')] = predict_infos[
+                'pl_output']
 
         suggest_time_end = time.time()
         self.suggest_time_duration = suggest_time_end - suggest_time_start

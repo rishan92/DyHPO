@@ -147,7 +147,7 @@ os.makedirs(pred_curves_path, exist_ok=True)
 
 while method_budget < budget_limit:
 
-    hp_index, budget = dyhpo_surrogate.suggest()
+    hp_index, budget = dyhpo_surrogate.suggest(method_budget)
     performance_curve = benchmark.get_curve(hp_index, budget)
     if budget == 10 or budget == 10 or budget == 20 or budget == 40:
         dyhpo_surrogate.plot_pred_curve(hp_index, benchmark, method_budget, pred_curves_path)

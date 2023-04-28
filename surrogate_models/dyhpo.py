@@ -68,6 +68,14 @@ class FeatureExtractorDPL(nn.Module):
                 )
             ),
         )
+
+        info = {
+            'alpha': alphas,
+            'beta': betas,
+            'gamma': gammas,
+            'pl_output': output,
+        }
+
         budgets = torch.unsqueeze(budgets, dim=1)
         alphas = torch.unsqueeze(alphas, dim=1)
         betas = torch.unsqueeze(betas, dim=1)
@@ -107,7 +115,7 @@ class FeatureExtractorDPL(nn.Module):
         # print(f"start {start_output}")
         # print(f"end {end_output}")
 
-        return x
+        return x, info
 
 
 class FeatureExtractorPowerLaw(nn.Module):
@@ -208,15 +216,23 @@ class FeatureExtractorPowerLaw(nn.Module):
                 )
             ),
         )
+
+        info = {
+            'alpha': alphas,
+            'beta': betas,
+            'gamma': gammas,
+            'pl_output': output,
+        }
+
         budgets = torch.unsqueeze(budgets, dim=1)
         alphas = torch.unsqueeze(alphas, dim=1)
         betas = torch.unsqueeze(betas, dim=1)
         gammas = torch.unsqueeze(gammas, dim=1)
         output = torch.unsqueeze(output, dim=1)
 
-        x = cat((alphas, betas, gammas, budgets, output), dim=1)
+        x = cat((alphas, betas, gammas, output), dim=1)
 
-        return x
+        return x, info
 
 
 class FeatureExtractor(nn.Module):
@@ -246,7 +262,6 @@ class FeatureExtractor(nn.Module):
                 f'bn{i + 1}',
                 nn.BatchNorm1d(configuration[f'layer{i}_units']),
             )
-
 
         setattr(
             self,
@@ -292,7 +307,7 @@ class FeatureExtractor(nn.Module):
         x = cat((x, lc_features), dim=1)
         x = self.act_func(getattr(self, f'fc{self.nr_layers}')(x))
 
-        return x
+        return x, None
 
 
 class PowerLawMean(gpytorch.means.Mean):
@@ -324,8 +339,8 @@ class GPRegressionModel(gpytorch.models.ExactGP):
         """
         super(GPRegressionModel, self).__init__(train_x, train_y, likelihood)
 
-        self.mean_module = gpytorch.means.ConstantMean()
-        # self.mean_module = PowerLawMean()
+        # self.mean_module = gpytorch.means.ConstantMean()
+        self.mean_module = PowerLawMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
 
     def forward(self, x):
@@ -364,7 +379,7 @@ class DyHPO:
         super(DyHPO, self).__init__()
         # self.feature_net_class = FeatureExtractor
         self.feature_net_class = FeatureExtractorPowerLaw  # FeatureExtractorDPL #
-        self.feature_net_output_size = 5
+        self.feature_net_output_size = 4
         self.feature_extractor = self.feature_net_class(configuration)
         self.batch_size = configuration['batch_size']
         self.nr_epochs = configuration['nr_epochs']
@@ -444,7 +459,8 @@ class DyHPO:
         train_x = torch.ones(train_size, train_size).to(self.dev)
         train_y = torch.ones(train_size).to(self.dev)
 
-        noise_constraint = Interval(lower_bound=1e-4, upper_bound=1e-3)
+        # noise_constraint = Interval(lower_bound=1e-4, upper_bound=1e-3)
+        noise_constraint = None
 
         likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=noise_constraint).to(self.dev)
         model = GPRegressionModel(train_x=train_x, train_y=train_y, likelihood=likelihood).to(self.dev)
@@ -518,7 +534,7 @@ class DyHPO:
             # Zero backprop gradients
             self.optimizer.zero_grad()
 
-            projected_x = self.feature_extractor(X_train, train_budgets, train_curves)
+            projected_x, _ = self.feature_extractor(X_train, train_budgets, train_curves)
             self.model.set_train_data(projected_x, y_train, strict=False)
             output = self.model(projected_x)
 
@@ -557,7 +573,7 @@ class DyHPO:
         self,
         train_data: Dict[str, torch.Tensor],
         test_data: Dict[str, torch.Tensor],
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, Dict]:
         """
 
         Args:
@@ -575,13 +591,13 @@ class DyHPO:
         self.likelihood.eval()
 
         with torch.no_grad(): # gpytorch.settings.fast_pred_var():
-            projected_train_x = self.feature_extractor(
+            projected_train_x, _ = self.feature_extractor(
                 train_data['X_train'],
                 train_data['train_budgets'],
                 train_data['train_curves'],
             )
             self.model.set_train_data(inputs=projected_train_x, targets=train_data['y_train'], strict=False)
-            projected_test_x = self.feature_extractor(
+            projected_test_x, test_predict_infos = self.feature_extractor(
                 test_data['X_test'],
                 test_data['test_budgets'],
                 test_data['test_curves'],
@@ -591,7 +607,9 @@ class DyHPO:
         means = preds.mean.detach().to('cpu').numpy().reshape(-1, )
         stds = preds.stddev.detach().to('cpu').numpy().reshape(-1, )
 
-        return means, stds
+        predict_infos = {key: value.detach().to('cpu').numpy() for key, value in test_predict_infos.items()}
+
+        return means, stds, predict_infos
 
     def load_checkpoint(self):
         """
